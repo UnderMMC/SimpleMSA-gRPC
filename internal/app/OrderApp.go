@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
 	"log"
 	"net/http"
 	"sync"
@@ -32,11 +33,13 @@ func (o *OrderApp) getUserFromToken(token string) (entity.User, error) {
 
 	// Вызов gRPC метода для валидации токена
 	resp, err := o.AuthClient.Validate(ctx, req)
-	if err == nil {
+	if err != nil {
 		return entity.User{}, err
 	}
 	// Преобразование ответа в объект User
 	return entity.User{Login: resp.Login}, nil
+
+	//return entity.User{}, nil // Возвращаем пустого пользователя, если Login отсутствует
 }
 
 func (o *OrderApp) OrderStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +81,14 @@ func (o *OrderApp) Run(wg *sync.WaitGroup) {
 		log.Fatal(err)
 	}
 
+	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
+	}
+	defer conn.Close()
+
+	o.AuthClient = pb.NewAuthServiceClient(conn) // Инициализация gRPC клиента
+
 	orderRepo := repository.NewOrderRepository(db)
 	orderServ := service.NewOrderService(orderRepo)
 	o.OderServ = orderServ
@@ -85,6 +96,6 @@ func (o *OrderApp) Run(wg *sync.WaitGroup) {
 	r := mux.NewRouter()
 	r.HandleFunc("/order", o.OrderStatusHandler)
 
-	log.Println("Starting server on :8081")
+	log.Println("Starting HTTP server on port :8081")
 	log.Fatal(http.ListenAndServe(":8081", r))
 }

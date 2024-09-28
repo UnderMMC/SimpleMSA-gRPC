@@ -52,26 +52,24 @@ func generateToken(user entity.User) (string, error) {
 }
 
 func validateToken(tokenString string) (string, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Проверка алгоритма
+	claims := &jwt.StandardClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		// Проверяем метод подписи
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return secretKey, nil
 	})
 
-	if err != nil || !token.Valid {
+	if err != nil {
 		return "", err
 	}
 
-	// Извлечение информации о пользователе из токена
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
+	if !token.Valid {
 		return "", fmt.Errorf("invalid token")
 	}
-	var user entity.User
-	user.Login = claims[user.Login].(string)
-	return user.Login, nil
+
+	return claims.Subject, nil
 }
 
 func (a *App) registrHandler(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +115,7 @@ func (s *server) Validate(ctx context.Context, req *pb.ValidateRequest) (*pb.Val
 	if err != nil {
 		return nil, err
 	}
-	return &pb.ValidateResponse{Login: login}, err
+	return &pb.ValidateResponse{Login: login}, nil
 }
 
 func New() *App {
